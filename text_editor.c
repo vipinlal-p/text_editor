@@ -3,7 +3,7 @@
  * Step37
  * Step51 2026-01-30
  * Step61 2026-01-30
- * step81
+ * step87
 ***/
 
 /*** includes ***/
@@ -24,6 +24,7 @@
 
 /*** defines ***/
 #define TEXT_EDITOR_VERSION "0.0.1"
+#define TEXT_EDITOR_TAB_STOP 8
 #define CTRL_KEY(k) ((k) & 0x1f)
 
 enum editorKey{
@@ -64,6 +65,7 @@ typedef struct erow{
 struct editorConfig{
 	
 	int cx,cy;
+	int rx;
 	int rowoff;
 	int coloff;
 	int screenrows;
@@ -197,13 +199,22 @@ int getWindowSize(int *rows, int * cols){
 
 void editorUpdateRow(erow *row){
 
-	free(row->render);
-	row->render = malloc(row->size+1);
-
+	int tabs = 0;
 	int j;
+	for (j=0;j<row->size;j++)
+	    if (row->chars[j]=='\t') tabs++;
+
+	free(row->render);
+	row->render = malloc(row->size+ tabs*(TEXT_EDITOR_TAB_STOP-1)+ 1);
+
 	int idx =0;
 	for (j = 0; j<row->size; j++){
-	    row->render[idx++] = row->chars[j];
+	    if (row->chars[j] == '\t'){
+		row->render[idx++] = ' ';
+		while(idx % TEXT_EDITOR_TAB_STOP != 0) row->render[idx++] = ' ';
+	    } else {
+		row->render[idx++] = row->chars[j];
+	    }
 	}
 	row->render[idx]='\0';
 	row->rsize = idx;
@@ -273,6 +284,7 @@ void abFree(struct abuf *ab){
 /*** output***/
 
 void editorScroll(){
+	E.rx = E.cx;
 
 	if (E.cy < E.rowoff){
 	    E.rowoff = E.cy;
@@ -281,10 +293,10 @@ void editorScroll(){
 	    E.rowoff = E.cy - E.screenrows + 1;
 	}
 	if (E.cx < E.coloff){
-	    E.coloff = E.cx;
+	    E.coloff = E.rx;
 	}
 	if (E.cx >= E.coloff + E.screencols){
-	    E.coloff = E.cx - E.screencols + 1;
+	    E.coloff = E.rx - E.screencols + 1;
 	}
 }
 
@@ -314,10 +326,10 @@ void editorDrawRows(struct abuf *ab){
 		    abAppend(ab,"~",1);
 		}
 	    } else{
-		int len = E.row[filerow].size - E.coloff;
+		int len = E.row[filerow].rsize - E.coloff;
 		if (len<0) len = 0;
 		if (len>E.screencols) len = E.screencols;
-		abAppend(ab,&E.row[filerow].chars[E.coloff],len);
+		abAppend(ab,&E.row[filerow].render[E.coloff],len);
 	    }
 
 	    abAppend(ab,"\x1b[K",3);
@@ -339,7 +351,7 @@ void editorRefreshScreen(){
 	editorDrawRows(&ab);
 	
 	char buf[32];
-	snprintf(buf,sizeof(buf),"\x1b[%d;%dH",(E.cy - E.rowoff) + 1, (E.cx - E.coloff)+1);
+	snprintf(buf,sizeof(buf),"\x1b[%d;%dH",(E.cy - E.rowoff) + 1, (E.rx - E.coloff)+1);
 	abAppend(&ab, buf, strlen(buf));
 
 	abAppend(&ab,"\x1b[?25h",6);
@@ -433,6 +445,7 @@ void initEditor(){
 
 	E.cx=0;
 	E.cy=0;
+	E.rx=0;
 	E.rowoff = 0;
 	E.coloff = 0;
 	E.numrows = 0;
